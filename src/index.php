@@ -1,23 +1,34 @@
 <?php
-// Koneksi ke database MySQL di dalam Docker
 $conn = new mysqli("mysql-db", "user", "user123", "todo_db");
 if ($conn->connect_error) {
     die("Koneksi gagal: " . $conn->connect_error);
 }
 
-// Tambah tugas baru
+// Cek apakah kolom completed sudah ada, jika belum tambahkan
+$result = $conn->query("SHOW COLUMNS FROM tasks LIKE 'completed'");
+if ($result->num_rows == 0) {
+    $conn->query("ALTER TABLE tasks ADD COLUMN completed TINYINT(1) DEFAULT 0");
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['title'])) {
     $title = $conn->real_escape_string($_POST['title']);
     $conn->query("INSERT INTO tasks (title) VALUES ('$title')");
-    header("Location: /"); // redirect agar tidak kirim ulang
+    header("Location: /");
     exit();
 }
 
-// Hapus tugas
 if (isset($_GET['delete'])) {
     $id = (int)$_GET['delete'];
     $conn->query("DELETE FROM tasks WHERE id = $id");
-    header("Location: /"); // redirect agar tidak kirim ulang
+    header("Location: /");
+    exit();
+}
+
+// Toggle status completed
+if (isset($_GET['toggle'])) {
+    $id = (int)$_GET['toggle'];
+    $conn->query("UPDATE tasks SET completed = NOT completed WHERE id = $id");
+    header("Location: /");
     exit();
 }
 ?>
@@ -26,93 +37,168 @@ if (isset($_GET['delete'])) {
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>To-Do List</title>
+  <title>Todos</title>
   <style>
     body {
-      background: #f5f7fa;
-      font-family: Arial, sans-serif;
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to bottom right, #fffde7, #fff176);
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 20px;
+      min-height: 100vh;
+      padding: 50px 20px;
     }
 
     h1 {
+      font-size: 48px;
+      color: #555;
       margin-bottom: 20px;
-      color: #333;
     }
 
     form {
+      width: 100%;
+      max-width: 500px;
       display: flex;
       gap: 10px;
       margin-bottom: 30px;
-      max-width: 500px;
-      width: 100%;
     }
 
     input[type="text"] {
       flex: 1;
-      padding: 10px;
+      padding: 14px;
       font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
+      border: none;
+      border-radius: 30px;
+      outline: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
 
     button {
-      padding: 10px 20px;
-      background-color: #007bff;
-      color: white;
+      padding: 14px 24px;
       border: none;
-      border-radius: 5px;
+      background-color: #fbc02d;
+      color: #fff;
+      border-radius: 30px;
+      font-weight: bold;
       cursor: pointer;
+      transition: 0.3s;
     }
 
     button:hover {
-      background-color: #0056b3;
+      background-color: #f9a825;
     }
 
     ul {
       list-style: none;
       padding: 0;
-      max-width: 500px;
       width: 100%;
+      max-width: 500px;
     }
 
     li {
-      background: #fff;
-      border: 1px solid #ddd;
-      padding: 12px;
-      border-radius: 5px;
-      margin-bottom: 10px;
+      background-color: white;
+      padding: 16px 20px;
+      margin-bottom: 15px;
+      border-radius: 15px;
       display: flex;
+      align-items: center;
       justify-content: space-between;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+      transition: 0.3s;
     }
 
-    a {
-      color: #dc3545;
+    li.completed {
+      opacity: 0.7;
+      background-color: #f5f5f5;
+    }
+
+    .task-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      color: #444;
+      flex: 1;
+      cursor: pointer;
+    }
+
+    .task-title.completed {
+      text-decoration: line-through;
+      color: #888;
+    }
+
+    .circle {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #fbc02d;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: 0.3s;
+      position: relative;
+    }
+
+    .circle.completed {
+      background-color: #4CAF50;
+      border-color: #4CAF50;
+    }
+
+    .circle.completed::after {
+      content: '✓';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .task-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .delete {
+      color: #f44336;
       text-decoration: none;
       font-size: 14px;
+      padding: 5px 8px;
+      border-radius: 50%;
+      transition: 0.3s;
     }
 
-    a:hover {
-      text-decoration: underline;
+    .delete:hover {
+      background-color: #ffebee;
     }
   </style>
 </head>
 <body>
-  <h1>📋 To-Do List</h1>
+  <h1>todos</h1>
 
   <form method="POST">
-    <input type="text" name="title" placeholder="Tambahkan tugas..." required>
-    <button type="submit">Tambah</button>
+    <input type="text" name="title" placeholder="What do you need to do?" required>
+    <button type="submit">+</button>
   </form>
 
   <ul>
     <?php
     $result = $conn->query("SELECT * FROM tasks ORDER BY id DESC");
     while ($row = $result->fetch_assoc()) {
-        echo "<li>" . htmlspecialchars($row['title']) .
-             " <a href='?delete=" . $row['id'] . "' onclick=\"return confirm('Yakin hapus tugas ini?')\">hapus</a></li>";
+        $completed = $row['completed'] ? 'completed' : '';
+        $circleClass = $row['completed'] ? 'circle completed' : 'circle';
+        $titleClass = $row['completed'] ? 'task-title completed' : 'task-title';
+        
+        echo "<li class='$completed'>";
+        echo "<div class='$titleClass' onclick=\"window.location.href='?toggle=" . $row['id'] . "'\">";
+        echo "<div class='$circleClass'></div>";
+        echo htmlspecialchars($row['title']);
+        echo "</div>";
+        echo "<div class='task-actions'>";
+        echo "<a class='delete' href='?delete=" . $row['id'] . "' onclick=\"return confirm('Yakin hapus?')\">✕</a>";
+        echo "</div>";
+        echo "</li>";
     }
     ?>
   </ul>
