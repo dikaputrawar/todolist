@@ -1,8 +1,25 @@
 <?php
-$conn = new mysqli("mysql-db", "user", "user123", "todo_db");
-if ($conn->connect_error) {
-    die("Koneksi gagal: " . $conn->connect_error);
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+$conn = null;
+for ($i = 0; $i < 10; $i++) {
+    try {
+        $conn = new mysqli("db", "user", "user123", "todo_db");
+        break;
+    } catch (mysqli_sql_exception $e) {
+        sleep(2);
+    }
 }
+if (!$conn || $conn->connect_error) {
+    die("Koneksi gagal: " . ($conn ? $conn->connect_error : "Tidak bisa terhubung ke database"));
+}
+
+// Pastikan tabel tasks ada
+$conn->query("CREATE TABLE IF NOT EXISTS tasks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    completed TINYINT(1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)");
 
 // Cek apakah kolom completed sudah ada, jika belum tambahkan
 $result = $conn->query("SHOW COLUMNS FROM tasks LIKE 'completed'");
